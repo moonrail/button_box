@@ -110,8 +110,9 @@ class ButtonBox:
                 divisor=4  # 1 detent per increment
             ) for i, pins in enumerate(encoder_pins)
         }
-        print(f'Initialized {len(self.encoders)} encoders')
-        self.buttons_count += len(self.encoders) * 2
+        count = len(self.encoders)
+        print(f'Initialized {count} encoders')
+        self.buttons_count += count * 2
 
     def process_inputs(self):
         self.scan_button_matrix()
@@ -136,12 +137,15 @@ class ButtonBox:
             row.switch_to_input()
 
     def scan_gnd_buttons(self):
+        """
+        NOTE: Does not trigger sending joystick reports
+        """
         if self.gnd_buttons is None:
             return
         for i, gnd_button in enumerate(self.gnd_buttons):
             self.joystick.set_button(
                 button=i + self.gnd_buttons_offset,
-                pressed=not gnd_button.value
+                pressed=not gnd_button.value  # inverted - 1 is released, 0 is pressed
             )
 
     def scan_encoders(self):
@@ -149,7 +153,7 @@ class ButtonBox:
             return
         for i, encoder in self.encoders.items():
             left_button = self.encoder_button_offset + i*2
-            right_button = left_button + 1
+            right_button = left_button + 1  # pins have to be in ascending order, so we do the same with button ids
             pos = encoder.position
             if pos == 0:
                 continue
