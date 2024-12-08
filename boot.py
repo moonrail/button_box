@@ -10,7 +10,9 @@ from digitalio import DigitalInOut, Pull
 
 supervisor.set_usb_identification(
     manufacturer='Example',
-    product='Button Box v1'
+    product='Button Box v1',
+    vid=0xF055,  # inofficial vendor id for FOSS projects
+    pid=0x0000   # choose a distinctive product id of your own
 )
 
 # Joystick with 64 digital buttons
