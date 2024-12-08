@@ -24,6 +24,19 @@ class Joystick:
     """
     Emulates a generic joystick with 64 buttons, numbered 1-64
     """
+    MIN_REPORT_SEND_GAP_S: float = 0.02
+    """
+    Minimum amount of seconds between HID reports being sent to the USB host
+
+    This solves several potential issues:
+    - debounce (for e.g. buttons with a flaky signal)
+    - an application not detecting button presses (potentially due to application internal debounce logic)
+      - this can be checked by using e.g. a tool like jstest and showing button presses - if jstest sees them, but the application does not, the application is at "fault"
+    - load on the USB host, due to e.g. too many HID reports in a short amount of time
+
+    NOTE: Increasing this value will lead to ignored inputs, as this is used via a synchronous sleep.
+    Any inputs being made and "unmade" (e.g. button press AND release) while sleeping will not be recognized.
+    """
 
     def __init__(self, devices: list[Device] | Device):
         """
@@ -34,6 +47,7 @@ class Joystick:
         `usage`.
         """
         self._device = find_device(devices, usage_page=0x1, usage=0x04)
+        self._earliest_report_send_threshold: float = 0.0
 
         # Reuse this bytearray to send reports.
         # Typically controllers start numbering buttons at 1 rather than 0.
@@ -174,6 +188,10 @@ class Joystick:
         )
 
         if force or self._last_report != self._report:
+            gap = self._earliest_report_send_threshold - time.monotonic()
+            if gap > 0:
+                time.sleep(gap)
             self._device.send_report(self._report)
             # Remember what we sent, without allocating new storage.
             self._last_report[:] = self._report
+            self._earliest_report_send_threshold = time.monotonic() + self.MIN_REPORT_SEND_GAP_S
