@@ -8,6 +8,7 @@ Linux/Windows compatible Button Box for e.g. Simracing
   - [Files](#files)
     - [boot.py](#bootpy)
     - [code.py](#codepy)
+    - [components.py](#componentspy)
     - [joystick.py](#joystickpy)
   - [GND Buttons](#gnd-buttons)
   - [Button Matrix](#button-matrix)
@@ -60,6 +61,9 @@ This file is executed after `boot.py` and after the USB connection has been esta
 It is the main loop that is executed permanently, scans for pressed buttons/toggled switches/turned encoders and announces them to the USB host.
 
 Here all pins are defined as well - these may be completely different to your own build Button Box and Use-Case, so change accordingly.
+### components.py
+This file contains logic for specific components, in this case: Encoders. This could be contained in `code.py` but is split into this file for structural reasons.
+
 ### joystick.py
 This file contains the interfacing logic used by `code.py` which is to send USB HID compliant reports to the USB host.
 

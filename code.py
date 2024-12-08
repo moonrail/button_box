@@ -1,7 +1,7 @@
 """
 Button Box with 64 possible buttons (as defined in joystick.py & boot.py)
 
-As per current definition of Pins below, 47 of 64 buttons are mapped:
+As per current definition of Pins below of these 64 buttons 47 are mapped:
 - Buttons 1-36: button matrix (6*6)
 - Button 37: "escape" button, that also enables serial, if pressed at boot time
 - Buttons 38-47: encoders (CounterClockwise * 5 + Clockwise * 5)
@@ -13,50 +13,81 @@ import board
 import supervisor
 import usb_hid
 
+from components import Encoder
 from joystick import Joystick
 from digitalio import DigitalInOut, Pull
 from microcontroller import Pin
-from rotaryio import IncrementalEncoder
 
 
 # disable auto reload
 supervisor.runtime.autoreload = False
 
 # pin definition, customize as required
-ESCAPE_BUTTON_PIN: Pin = board.GP22
-BUTTON_MATRIX_COLUMN_PINS: tuple[Pin] = (board.GP0, board.GP1, board.GP2, board.GP3, board.GP4, board.GP5)
-BUTTON_MATRIX_ROW_PINS: tuple[Pin] = (board.GP10, board.GP11, board.GP12, board.GP13, board.GP14, board.GP15)
-ENCODER_PINS: tuple[tuple[Pin]] = (
-    (board.GP8, board.GP9),
-    (board.GP16, board.GP17),
-    (board.GP18, board.GP19),
-    (board.GP20, board.GP21),
-    (board.GP27, board.GP28)
-)
+BUTTON_PINS: list[Pin] = [
+    board.GP22  # Escape Button
+]
+BUTTON_MATRIX_COLUMN_PINS: list[Pin] = [
+    board.GP0,
+    board.GP1,
+    board.GP2,
+    board.GP3,
+    board.GP4,
+    board.GP5
+]
+BUTTON_MATRIX_ROW_PINS: list[Pin] = [
+    board.GP10,
+    board.GP11,
+    board.GP12,
+    board.GP13,
+    board.GP14,
+    board.GP15
+]
+ENCODERS: list[Encoder] = [
+    Encoder(
+        pin_a=board.GP9,
+        pin_b=board.GP8
+    ),
+    Encoder(
+        pin_a=board.GP17,
+        pin_b=board.GP16
+    ),
+    Encoder(
+        pin_a=board.GP19,
+        pin_b=board.GP18
+    ),
+    Encoder(
+        pin_a=board.GP21,
+        pin_b=board.GP20
+    ),
+    Encoder(
+        pin_a=board.GP28,
+        pin_b=board.GP27
+    )
+]
 
 
 class ButtonBox:
     joystick: Joystick
-    buttons_count: int
+    button_count: int
     button_matrix_offset: int | None
     button_matrix_columns: list[DigitalInOut] | None
     button_matrix_rows: list[DigitalInOut] | None
     gnd_buttons_offset: int | None
     gnd_buttons: list[DigitalInOut] | None
     encoder_button_offset: int | None
-    encoders: dict[int, IncrementalEncoder] | None
+    encoders: list[Encoder] | None
 
     def __init__(
-        self, button_matrix_column_pins: tuple[Pin] = None, button_matrix_row_pins: tuple[Pin] = None,
-        gnd_buttons_pins: tuple[Pin] = None, encoder_pins: tuple[tuple[Pin]] = None
+        self, button_matrix_column_pins: list[Pin] | None = None, button_matrix_row_pins: list[Pin] | None = None,
+        gnd_button_pins: list[Pin] | None = None, encoders: list[Encoder] | None = None
     ):
         print('Initializing ButtonBox')
-        self.buttons_count = 0
+        self.button_count = 0
         self.joystick = Joystick(usb_hid.devices)
         self._setup_button_matrix(button_matrix_column_pins, button_matrix_row_pins)
-        self._setup_gnd_buttons(gnd_buttons_pins)
-        self._setup_encoders(encoder_pins)
-        print(f'ButtonBox initialized with {self.buttons_count} buttons')
+        self._setup_gnd_buttons(gnd_button_pins)
+        self._setup_encoders(encoders)
+        print(f'ButtonBox initialized with {self.button_count} buttons')
 
     def _setup_button_matrix(self, button_matrix_column_pins: tuple[Pin] | None, button_matrix_row_pins: tuple[Pin] | None):
         self.button_matrix_columns = None
@@ -64,9 +95,11 @@ class ButtonBox:
         self.button_matrix_offset = None
         if not button_matrix_column_pins and not button_matrix_row_pins:
             return
-        assert button_matrix_column_pins and button_matrix_row_pins, 'Provide both button matrix arguments - columns and rows - or neither, but not one without the other'
 
-        self.button_matrix_offset = self.buttons_count + 1
+        if not button_matrix_column_pins or not button_matrix_row_pins:
+            raise ValueError('Provide both button matrix arguments - columns and rows - or neither, but not one without the other')
+
+        self.button_matrix_offset = self.button_count + 1
         self.button_matrix_columns = {
             i: DigitalInOut(pin_id)
             for i, pin_id in enumerate(button_matrix_column_pins)
@@ -79,11 +112,11 @@ class ButtonBox:
         }
         count = len(self.button_matrix_columns) * len(self.button_matrix_rows)
         print(f'Initialized {count} button matrix buttons')
-        self.buttons_count += len(self.button_matrix_columns) * len(self.button_matrix_rows)
+        self.button_count += len(self.button_matrix_columns) * len(self.button_matrix_rows)
 
     def _setup_gnd_buttons(self, gnd_buttons_pins: tuple[Pin] | None):
         self.gnd_buttons = None
-        self.gnd_buttons_offset = self.buttons_count + 1
+        self.gnd_buttons_offset = self.button_count + 1
         if not gnd_buttons_pins:
             return
 
@@ -94,25 +127,18 @@ class ButtonBox:
             self.gnd_buttons.append(dpin)
         count = len(self.gnd_buttons)
         print(f'Initialized {count} gnd buttons')
-        self.buttons_count += count
+        self.button_count += count
 
-    def _setup_encoders(self, encoder_pins: tuple[tuple[Pin]] | None):
+    def _setup_encoders(self, encoders: list[Encoder] | None):
         self.encoders = None
-        self.encoder_button_offset = None
-        if not encoder_pins:
+        self.encoder_button_offset = -1
+        if not encoders:
             return
 
-        self.encoder_button_offset = self.buttons_count + 1
-        self.encoders = {
-            i: IncrementalEncoder(
-                pin_a=pins[0],
-                pin_b=pins[1],
-                divisor=4  # 1 detent per increment
-            ) for i, pins in enumerate(encoder_pins)
-        }
-        count = len(self.encoders)
-        print(f'Initialized {count} encoders')
-        self.buttons_count += count * 2
+        self.encoder_button_offset = self.button_count + 1
+        self.encoders = encoders
+        self.button_count += len(self.encoders) * Encoder.BUTTON_COUNT
+        print(f'Initialized {len(self.encoders)} encoders from button #{self.encoder_button_offset} to #{self.button_count}')
 
     def process_inputs(self):
         self.scan_button_matrix()
@@ -137,38 +163,36 @@ class ButtonBox:
             row.switch_to_input()
 
     def scan_gnd_buttons(self):
-        """
-        NOTE: Does not trigger sending joystick reports
-        """
         if self.gnd_buttons is None:
             return
         for i, gnd_button in enumerate(self.gnd_buttons):
             self.joystick.set_button(
                 button=i + self.gnd_buttons_offset,
-                pressed=not gnd_button.value  # inverted - 1 is released, 0 is pressed
+                pressed=not gnd_button.value
             )
 
     def scan_encoders(self):
         if self.encoders is None:
             return
-        for i, encoder in self.encoders.items():
-            left_button = self.encoder_button_offset + i*2
-            right_button = left_button + 1  # pins have to be in ascending order, so we do the same with button ids
-            pos = encoder.position
-            if pos == 0:
-                continue
-            encoder.position = 0
-            if pos < 0:
+        for i, encoder in enumerate(self.encoders):
+            left_button = self.encoder_button_offset + i * Encoder.BUTTON_COUNT
+            right_button = left_button + 1
+            click_amount = encoder.get_click_amount()
+            while click_amount < 0:
+                # print(f'Encoder {i}: LB {left_button_id} click')
                 self.joystick.click_button(left_button)
-            elif pos > 0:
+                click_amount += 1
+            while click_amount > 0:
+                # print(f'Encoder {i}: RB {right_button_id} click')
                 self.joystick.click_button(right_button)
+                click_amount -= 1
 
 
 button_box = ButtonBox(
-    gnd_buttons_pins=(ESCAPE_BUTTON_PIN,),
+    gnd_button_pins=BUTTON_PINS,
     button_matrix_column_pins=BUTTON_MATRIX_COLUMN_PINS,
     button_matrix_row_pins=BUTTON_MATRIX_ROW_PINS,
-    encoder_pins=ENCODER_PINS
+    encoders=ENCODERS
 )
 while True:
     button_box.process_inputs()
